@@ -29,6 +29,7 @@
                     <li class="nav-item"><a class="nav-link" href="#lab">Lab</a></li>
                     <li class="nav-item"><a class="nav-link" href="#activity">Exams</a></li>
                     <li class="nav-item"><a class="nav-link" href="#staff">Staff</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#data-dictionary">Data Dict</a></li>
                 </ul>
             </div>
         </div>
@@ -891,6 +892,154 @@
             </div>
         </section>
 
+        <!-- Data Dictionary & Relationship Diagram -->
+        <section id="data-dictionary" class="mb-5">
+            <h2 class="section-title">Data Dictionary & Table Relationship Diagram</h2>
+            <div class="card">
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-12 col-lg-4">
+                            <div class="dd-controls">
+                                <label class="form-label fw-semibold">Input format</label>
+                                <select id="dd-format" class="form-select form-select-sm mb-2">
+                                    <option value="auto" selected>Auto-detect</option>
+                                    <option value="json">JSON</option>
+                                    <option value="xml">XML</option>
+                                </select>
+
+                                <label for="dd-file" class="form-label fw-semibold">Upload schema (JSON/XML)</label>
+                                <input id="dd-file" type="file" accept=".json,.xml,.txt" class="form-control form-control-sm mb-2" />
+
+                                <div class="d-flex flex-wrap gap-2 mb-2">
+                                    <button id="dd-load-sample" class="btn btn-outline-secondary btn-sm">
+                                        <i class="fa fa-flask me-1"></i>Load sample
+                                    </button>
+                                    <button id="dd-render" class="btn btn-primary btn-sm">
+                                        <i class="fa fa-wand-magic-sparkles me-1"></i>Render
+                                    </button>
+                                    <button id="dd-clear" class="btn btn-outline-secondary btn-sm">
+                                        <i class="fa fa-eraser me-1"></i>Clear
+                                    </button>
+                                </div>
+
+                                <textarea id="dd-input" class="form-control dd-input" rows="12" placeholder="Paste JSON or XML describing tables, columns, and relationships..."></textarea>
+
+                                <div class="mt-3 d-flex flex-wrap gap-2">
+                                    <button id="dd-export-pdf" class="btn btn-success btn-sm">
+                                        <i class="fa fa-file-pdf me-1"></i>Export PDF
+                                    </button>
+                                    <button id="dd-export-html" class="btn btn-outline-success btn-sm">
+                                        <i class="fa fa-file-code me-1"></i>Export HTML
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-lg-8">
+                            <div class="dd-help alert alert-info small">
+                                <div class="fw-semibold mb-1"><i class="fa fa-circle-info me-1"></i>How to generate the input from your DB</div>
+                                <details class="mb-2">
+                                    <summary class="fw-semibold">PostgreSQL</summary>
+                                    <div class="mt-2">
+                                        1) Dump schema only: <code>pg_dump -s -d your_db &gt; schema.sql</code><br/>
+                                        2) Or run the following to produce JSON of tables, columns, and FKs:
+<pre class="dd-code-block"><code>-- Tables and columns
+SELECT json_agg(row_to_json(t))
+FROM (
+  SELECT c.table_name AS table, c.column_name AS column,
+         c.is_nullable = 'YES' AS nullable,
+         c.data_type || COALESCE('('||c.character_maximum_length||')','') AS type,
+         (SELECT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+              ON tc.constraint_name = kcu.constraint_name
+           WHERE tc.table_name = c.table_name AND tc.constraint_type='PRIMARY KEY'
+             AND kcu.column_name = c.column_name)) AS pk
+  FROM information_schema.columns c
+  WHERE c.table_schema = 'public'
+) t;
+
+-- Foreign keys
+SELECT json_agg(row_to_json(fk))
+FROM (
+  SELECT tc.constraint_name AS fk_name,
+         kcu.table_name     AS from_table,
+         kcu.column_name    AS from_column,
+         ccu.table_name     AS to_table,
+         ccu.column_name    AS to_column
+  FROM information_schema.table_constraints AS tc
+  JOIN information_schema.key_column_usage AS kcu
+    ON tc.constraint_name = kcu.constraint_name
+  JOIN information_schema.constraint_column_usage AS ccu
+    ON ccu.constraint_name = tc.constraint_name
+  WHERE tc.constraint_type = 'FOREIGN KEY'
+) fk;</code></pre>
+                                        Combine these JSON arrays into the tool's expected shape using a small script or manually.
+                                    </div>
+                                </details>
+                                <details class="mb-2">
+                                    <summary class="fw-semibold">MySQL</summary>
+                                    <div class="mt-2">
+                                        1) Dump schema only: <code>mysqldump --no-data your_db &gt; schema.sql</code><br/>
+                                        2) Or query <code>INFORMATION_SCHEMA.COLUMNS</code> and <code>INFORMATION_SCHEMA.KEY_COLUMN_USAGE</code> to construct JSON of tables, columns, PKs, and FKs.
+                                    </div>
+                                </details>
+                                <details class="mb-2">
+                                    <summary class="fw-semibold">SQLite</summary>
+                                    <div class="mt-2">
+                                        1) Dump schema: <code>sqlite3 your.db ".schema" &gt; schema.sql</code><br/>
+                                        2) Columns: <code>PRAGMA table_info(table_name);</code> FKs: <code>PRAGMA foreign_key_list(table_name);</code> Aggregate into the JSON structure described below.
+                                    </div>
+                                </details>
+                                <details>
+                                    <summary class="fw-semibold">Expected JSON shape (example)</summary>
+<pre class="dd-code-block"><code>{
+  "database": "shop",
+  "tables": [
+    {
+      "name": "users",
+      "columns": [
+        {"name": "id", "type": "INT", "pk": true, "nullable": false},
+        {"name": "email", "type": "VARCHAR(255)", "nullable": false, "unique": true}
+      ]
+    }
+  ],
+  "relationships": [
+    {"fromTable": "orders", "fromColumn": "user_id", "toTable": "users", "toColumn": "id"}
+  ]
+}</code></pre>
+                                </details>
+                            </div>
+
+                            <ul class="nav nav-tabs" id="dd-tabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="dd-tab-dict-tab" data-bs-toggle="tab" data-bs-target="#dd-tab-dict" type="button" role="tab">Data Dictionary</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="dd-tab-diagram-tab" data-bs-toggle="tab" data-bs-target="#dd-tab-diagram" type="button" role="tab">Diagram</button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="dd-tab-json-tab" data-bs-toggle="tab" data-bs-target="#dd-tab-json" type="button" role="tab">JSON</button>
+                                </li>
+                            </ul>
+                            <div class="tab-content dd-output" id="dd-output">
+                                <div class="tab-pane fade show active" id="dd-tab-dict" role="tabpanel">
+                                    <div id="dd-dictionary"></div>
+                                </div>
+                                <div class="tab-pane fade" id="dd-tab-diagram" role="tabpanel">
+                                    <div id="dd-diagram-wrapper" class="dd-diagram-wrapper">
+                                        <svg id="dd-diagram" class="dd-diagram" role="img" aria-label="Table relationship diagram"></svg>
+                                    </div>
+                                </div>
+                                <div class="tab-pane fade" id="dd-tab-json" role="tabpanel">
+                                    <pre id="dd-json" class="dd-json"></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- Important Links -->
         <section class="mb-5">
             <div class="card">
@@ -964,6 +1113,9 @@
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script src="script.js"></script>
     
 </body>
